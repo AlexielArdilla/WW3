@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guerra Mundial 3 - Juego Accesible</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #000000;
+            color: #FFFFFF;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: manipulation; /* Previene el zoom accidental al hacer doble tap rápido */
+        }
+        
+        /* Clases para alto contraste y botones grandes */
+        .btn-game {
+            display: block;
+            width: 100%;
+            background-color: #1a1a1a;
+            color: #FFFF00;
+            border: 4px solid #FFFF00;
+            border-radius: 12px;
+            padding: 24px 16px;
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: center;
+            transition: background-color 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-game:hover, .btn-game:active {
+            background-color: #FFFF00;
+            color: #000000;
+        }
+
+        .btn-action {
+            background-color: #000000;
+            color: #00FF00;
+            border-color: #00FF00;
+        }
+        
+        .btn-action:hover, .btn-action:active {
+            background-color: #00FF00;
+            color: #000000;
+        }
+
+        .btn-danger {
+            background-color: #000000;
+            color: #FF3333;
+            border-color: #FF3333;
+        }
+
+        .btn-danger:hover, .btn-danger:active {
+            background-color: #FF3333;
+            color: #000000;
+        }
+
+        /* Ocultar pantallas inactivas */
+        .screen {
+            display: none;
+            min-height: 100vh;
+            padding: 20px;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        h1, h2 {
+            color: #FFFF00;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        /* Lector de pantalla oculto pero accesible */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Región ARIA para lectores de pantalla nativos -->
+    <div id="aria-live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+    <!-- PANTALLA 0: INICIO (Necesario para activar el audio en navegadores web) -->
+    <div id="screen-intro" class="screen active">
+        <h1 class="text-4xl font-extrabold mb-8">Guerra Mundial 3<br>Simulador Táctico</h1>
+        <p class="text-xl text-center mb-8" aria-hidden="true">Juego diseñado para accesibilidad total. Todo el texto será leído en voz alta.</p>
+        <button class="btn-game" onclick="initGame()" aria-label="Tocar pantalla para iniciar el juego y activar el audio">
+            TOCAR AQUÍ PARA INICIAR JUEGO Y ACTIVAR AUDIO
+        </button>
+    </div>
+
+    <!-- PANTALLA 1: SELECCIÓN DE BANDO -->
+    <div id="screen-faction" class="screen">
+        <h2 class="text-3xl font-bold">Selecciona tu Bando</h2>
+        <div id="faction-list" class="flex flex-col gap-4 mt-4">
+            <!-- Los botones se inyectan por JS -->
+        </div>
+    </div>
+
+    <!-- PANTALLA 2: RESUMEN DE ESTADO Y TRANSICIÓN DE TURNO -->
+    <div id="screen-status" class="screen">
+        <h2 class="text-3xl font-bold" id="status-title">Estado de la Guerra</h2>
+        <p id="status-text" class="text-2xl mb-8 text-center text-white"></p>
+        <button id="btn-continue-turn" class="btn-game btn-action" onclick="startNextPhase()">
+            CONTINUAR
+        </button>
+    </div>
+
+    <!-- PANTALLA 3: SELECCION DE OBJETIVO -->
+    <div id="screen-target" class="screen">
+        <h2 class="text-3xl font-bold">Elige el Objetivo Enemigo</h2>
+        <button class="btn-game" onclick="selectTarget('Base Militar', 0)">
+            BASE MILITAR (Dificultad alta, reduce el ataque enemigo)
+        </button>
+        <button class="btn-game" onclick="selectTarget('Ciudad Principal', 1)">
+            CIUDAD PRINCIPAL (Dificultad media, daño directo a los recursos)
+        </button>
+        <button class="btn-game" onclick="selectTarget('Red de Comunicaciones', 2)">
+            RED DE COMUNICACIONES (Dificultad baja, daño leve pero seguro)
+        </button>
+    </div>
+
+    <!-- PANTALLA 4: SELECCION DE ARMA/PODER -->
+    <div id="screen-weapon" class="screen">
+        <h2 class="text-3xl font-bold">Elige tu Arma de Ataque</h2>
+        <button class="btn-game" onclick="selectWeapon('Ataque Cibernético', 1)">
+            ATAQUE CIBERNÉTICO (Requiere sacar 2 o más en el dado)
+        </button>
+        <button class="btn-game btn-danger" onclick="selectWeapon('Bombardeo Aéreo', 2)">
+            BOMBARDEO AÉREO (Requiere sacar 3 o más en el dado)
+        </button>
+        <button class="btn-game btn-danger" style="border-color: #FF0000; color: #FF0000;" onclick="selectWeapon('Misil Nuclear', 3)">
+            MISIL NUCLEAR (Requiere sacar 5 o más en el dado. Daño masivo)
+        </button>
+    </div>
+
+    <!-- PANTALLA 5: FIN DEL JUEGO -->
+    <div id="screen-gameover" class="screen">
+        <h2 class="text-4xl font-extrabold" id="gameover-title">Fin del Juego</h2>
+        <p id="gameover-text" class="text-2xl mb-8 text-center"></p>
+        <button class="btn-game btn-action" onclick="location.reload()">
+            VOLVER A JUGAR
+        </button>
+    </div>
+
+    <script>
+        // --- ESTADO DEL JUEGO ---
+        const gameState = {
+            player: { name: '', hp: 100, defenseMod: 0 },
+            enemy: { name: '', hp: 100, defenseMod: 0 },
+            turn: 'player', // 'player' o 'enemy'
+            phase: 'status',
+            selectedTarget: null,
+            selectedWeapon: null
+        };
+
+        const factions = ["Estados Unidos", "Rusia", "China", "Unión Europea"];
+        
+        // --- SISTEMA DE AUDIO (Speech Synthesis) ---
+        let isSpeaking = false;
+        
+        function speak(text, callback = null) {
+            // Actualizar región ARIA para lectores de pantalla nativos
+            document.getElementById('aria-live-region').innerText = text;
+
+            // Usar Web Speech API para dar voz a la app por sí misma
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Detener cualquier audio previo
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-ES'; // Español
+                utterance.rate = 1.0;     // Velocidad normal
+                utterance.pitch = 1.0;
+                
+                utterance.onstart = () => { isSpeaking = true; };
+                utterance.onend = () => { 
+                    isSpeaking = false; 
+                    if (callback) callback(); 
+                };
+                utterance.onerror = () => {
+                    isSpeaking = false;
+                    if (callback) callback(); // Fallback en caso de error
+                };
+
+                window.speechSynthesis.speak(utterance);
+            } else {
+                // Si no hay soporte, ejecutar el callback de todas formas
+                if (callback) callback();
+            }
+        }
+
+        // --- MANEJO DE PANTALLAS ---
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // --- LÓGICA DEL JUEGO ---
+
+        function initGame() {
+            speak("Bienvenido al simulador táctico de la Tercera Guerra Mundial. El juego ha comenzado. A continuación, selecciona tu bando.", () => {
+                renderFactionScreen();
+                showScreen('screen-faction');
+            });
+        }
+
+        function renderFactionScreen() {
+            const list = document.getElementById('faction-list');
+            list.innerHTML = '';
+            factions.forEach(faction => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-game';
+                btn.innerText = `Elegir ${faction}`;
+                btn.onclick = () => chooseFaction(faction);
+                list.appendChild(btn);
+            });
+            
+            // Añadir instrucciones por voz cuando se muestra la pantalla
+            setTimeout(() => {
+                if(!isSpeaking) speak("Pantalla de selección de bando. Tienes 4 opciones: Estados Unidos, Rusia, China o Unión Europea. Toca una opción en la pantalla.");
+            }, 500);
+        }
+
+        function chooseFaction(faction) {
+            gameState.player.name = faction;
+            // Elegir enemigo aleatorio que no sea el jugador
+            let enemy = factions[Math.floor(Math.random() * factions.length)];
+            while (enemy === faction) {
+                enemy = factions[Math.floor(Math.random() * factions.length)];
+            }
+            gameState.enemy.name = enemy;
+            
+            const msg = `Has elegido a ${gameState.player.name}. Tu enemigo será ${gameState.enemy.name}. La guerra ha comenzado. Tu salud es 100. La salud del enemigo es 100. Toca el botón continuar para iniciar tu turno.`;
+            
+            document.getElementById('status-title').innerText = "Inicio del Conflicto";
+            document.getElementById('status-text').innerText = msg;
+            document.getElementById('btn-continue-turn').innerText = "COMENZAR MI TURNO";
+            
+            showScreen('screen-status');
+            speak(msg);
+            
+            gameState.turn = 'player';
+            gameState.phase = 'select_target';
+        }
+
+        function startNextPhase() {
+            // Detenemos el audio si el usuario presiona continuar antes de que termine de hablar
+            window.speechSynthesis.cancel(); 
+
+            if (gameState.player.hp <= 0 || gameState.enemy.hp <= 0) {
+                handleGameOver();
+                return;
+            }
+
+            if (gameState.turn === 'player') {
+                if (gameState.phase === 'select_target') {
+                    showScreen('screen-target');
+                    speak("Tu turno. Paso 1. Elige el objetivo enemigo. Opciones: Base Militar, Ciudad Principal, o Red de Comunicaciones.");
+                } else if (gameState.phase === 'select_weapon') {
+                    showScreen('screen-weapon');
+                    speak("Paso 2. Elige el arma. Opciones: Ataque Cibernético, Bombardeo Aéreo, o Misil Nuclear.");
+                }
+            } else {
+                // Turno del enemigo
+                executeEnemyTurn();
+            }
+        }
+
+        function selectTarget(name, typeId) {
+            gameState.selectedTarget = { name, typeId };
+            gameState.phase = 'select_weapon';
+            speak(`Objetivo fijado: ${name}. Ahora, presiona el botón de continuar para elegir el arma.`);
+            
+            document.getElementById('status-title').innerText = "Objetivo Fijado";
+            document.getElementById('status-text').innerText = `Has apuntado a: ${name}.`;
+            document.getElementById('btn-continue-turn').innerText = "ELEGIR ARMA";
+            showScreen('screen-status');
+        }
+
+        function selectWeapon(name, powerId) {
+            gameState.selectedWeapon = { name, powerId };
+            resolvePlayerAttack();
+        }
+
+        function rollDice() {
+            // Retorna un número del 1 al 6
+            return Math.floor(Math.random() * 6) + 1;
+        }
+
+        function resolvePlayerAttack() {
+            const dice = rollDice();
+            const weapon = gameState.selectedWeapon;
+            const target = gameState.selectedTarget;
+            
+            let successMessage = "";
+            let damage = 0;
+            let defenseReduction = 0;
+
+            // Lógica basada en el arma (dificultad del dado)
+            let requiredRoll = 1;
+            if (weapon.powerId === 1) requiredRoll = 2; // Ciberataque
+            if (weapon.powerId === 2) requiredRoll = 3; // Bombardeo
+            if (weapon.powerId === 3) requiredRoll = 5; // Nuclear
+
+            // Modificador por objetivo
+            if (target.typeId === 0) requiredRoll += 1; // Base militar es más difícil
+
+            if (dice >= requiredRoll) {
+                // Éxito
+                if (weapon.powerId === 1) damage = 10 + (dice * 2);
+                if (weapon.powerId === 2) damage = 20 + (dice * 3);
+                if (weapon.powerId === 3) damage = 40 + (dice * 5);
+
+                // Efecto extra del objetivo
+                if (target.typeId === 0) {
+                    defenseReduction = 10; 
+                    successMessage = `¡Impacto directo! Destruiste su base militar. El enemigo hará menos daño en su próximo turno. Has causado ${damage} de daño.`;
+                } else if (target.typeId === 1) {
+                    damage += 10; // Daño extra a ciudades
+                    successMessage = `¡Ataque exitoso a la ciudad! Has causado un daño severo de ${damage} puntos.`;
+                } else {
+                    successMessage = `Red de comunicaciones destruida. Has causado ${damage} de daño.`;
+                }
+
+                gameState.enemy.hp -= damage;
+                gameState.enemy.defenseMod = defenseReduction; // Reduce el ataque enemigo
+                
+            } else {
+                // Fallo
+                successMessage = `El ataque ha fallado o fue interceptado por las defensas enemigas. Daño causado: 0.`;
+            }
+
+            if(gameState.enemy.hp < 0) gameState.enemy.hp = 0;
+
+            const fullMessage = `Lanzando ataque... Tirando el dado de 6 caras. Ha salido un ${dice}. Se requería un ${requiredRoll}. ${successMessage} La salud de ${gameState.enemy.name} baja a ${gameState.enemy.hp}. Toca el botón para pasar al turno del enemigo.`;
+
+            document.getElementById('status-title').innerText = "Resultado de tu Ataque";
+            document.getElementById('status-text').innerText = fullMessage;
+            document.getElementById('btn-continue-turn').innerText = "PASAR TURNO AL ENEMIGO";
+            
+            showScreen('screen-status');
+            speak(fullMessage);
+
+            // Preparar turno enemigo
+            gameState.turn = 'enemy';
+        }
+
+        function executeEnemyTurn() {
+            const dice = rollDice();
+            let enemyAttackName = "";
+            let requiredRoll = 3; // Promedio
+            let damage = 0;
+
+            // Enemigo elige ataque aleatorio
+            const attackChoice = Math.floor(Math.random() * 3);
+            if(attackChoice === 0) {
+                enemyAttackName = "Ciberataque";
+                requiredRoll = 2;
+                damage = 15;
+            } else if (attackChoice === 1) {
+                enemyAttackName = "Ataque Aéreo";
+                requiredRoll = 3;
+                damage = 25;
+            } else {
+                enemyAttackName = "Misil Estratégico";
+                requiredRoll = 5;
+                damage = 45;
+            }
+
+            let resultMessage = `El enemigo ${gameState.enemy.name} intenta un ${enemyAttackName}. Tirando el dado... Saca un ${dice}. `;
+
+            if (dice >= requiredRoll) {
+                // Aplica modificador de defensa si el jugador atacó una base antes
+                let finalDamage = damage + (dice * 2) - gameState.enemy.defenseMod;
+                if (finalDamage < 5) finalDamage = 5; // Daño mínimo
+
+                gameState.player.hp -= finalDamage;
+                resultMessage += `¡El ataque enemigo impactó! Recibes ${finalDamage} de daño. `;
+            } else {
+                resultMessage += `¡El ataque enemigo falló y no sufriste daños! `;
+            }
+
+            // Resetear modificador
+            gameState.enemy.defenseMod = 0;
+
+            if(gameState.player.hp < 0) gameState.player.hp = 0;
+
+            resultMessage += `Tu salud actual es ${gameState.player.hp}. Toca el botón para iniciar tu próximo turno.`;
+
+            document.getElementById('status-title').innerText = "Turno del Enemigo";
+            document.getElementById('status-text').innerText = resultMessage;
+            document.getElementById('btn-continue-turn').innerText = "COMENZAR MI TURNO";
+            
+            showScreen('screen-status');
+            speak(resultMessage);
+
+            // Preparar turno jugador
+            gameState.turn = 'player';
+            gameState.phase = 'select_target';
+        }
+
+        function handleGameOver() {
+            showScreen('screen-gameover');
+            let msg = "";
+            
+            if (gameState.player.hp <= 0 && gameState.enemy.hp <= 0) {
+                document.getElementById('gameover-title').innerText = "Aniquilación Mutua";
+                msg = "Ambas naciones han sido destruidas. No hay ganadores en esta guerra.";
+            } else if (gameState.player.hp <= 0) {
+                document.getElementById('gameover-title').innerText = "Derrota";
+                document.getElementById('gameover-title').style.color = "#FF3333";
+                msg = `Tus fuerzas han caído. ${gameState.enemy.name} ha ganado la guerra.`;
+            } else {
+                document.getElementById('gameover-title').innerText = "¡Victoria!";
+                document.getElementById('gameover-title').style.color = "#00FF00";
+                msg = `¡Has derrotado a ${gameState.enemy.name}! ${gameState.player.name} es la nación victoriosa.`;
+            }
+
+            msg += " Toca el botón en la pantalla para volver a jugar.";
+            document.getElementById('gameover-text').innerText = msg;
+            speak(msg);
+        }
+
+    </script>
+</body>
+</html>
